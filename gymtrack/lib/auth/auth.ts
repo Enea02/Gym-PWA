@@ -23,26 +23,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
+        try {
+          const parsed = loginSchema.safeParse(credentials);
+          if (!parsed.success) {
+            console.log('[auth] Validation failed:', parsed.error.issues);
+            return null;
+          }
 
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.email, parsed.data.email))
-          .limit(1);
+          console.log('[auth] Looking up user:', parsed.data.email);
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, parsed.data.email))
+            .limit(1);
 
-        if (!user) return null;
+          console.log('[auth] User found:', !!user);
+          if (!user) return null;
 
-        const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-        if (!valid) return null;
+          const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+          console.log('[auth] Password valid:', valid);
+          if (!valid) return null;
 
-        await db
-          .update(users)
-          .set({ lastLoginAt: new Date() })
-          .where(eq(users.id, user.id));
+          await db
+            .update(users)
+            .set({ lastLoginAt: new Date() })
+            .where(eq(users.id, user.id));
 
-        return { id: user.id, email: user.email, name: user.name, role: user.role };
+          console.log('[auth] Login success for:', user.email, 'role:', user.role);
+          return { id: user.id, email: user.email, name: user.name, role: user.role };
+        } catch (err) {
+          console.error('[auth] authorize error:', err);
+          return null;
+        }
       },
     }),
   ],

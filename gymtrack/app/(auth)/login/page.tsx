@@ -1,30 +1,36 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
-export default function LoginPage() {
-  const router = useRouter();
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl') || '/';
+  const urlError = searchParams.get('error');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(urlError ? 'Email o password non corretti' : '');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
-    try {
-      const res = await signIn('credentials', { email, password, redirect: false });
-      if (res?.error) {
-        setError('Email o password non corretti');
-      } else {
-        router.push('/');
-      }
-    } finally {
-      setLoading(false);
-    }
+
+    // Use redirect: true (default) so NextAuth sets the cookie server-side
+    // before the browser is redirected. This is the reliable path.
+    // On failure, NextAuth redirects to /login?error=CredentialsSignin.
+    await signIn('credentials', {
+      email,
+      password,
+      callbackUrl,
+    });
+
+    // If signIn threw or returned without redirecting (shouldn't happen normally)
+    setLoading(false);
+    setError('Email o password non corretti');
   }
 
   return (
@@ -33,7 +39,6 @@ export default function LoginPage() {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '24px 22px', position: 'relative',
     }}>
-      {/* bg blob */}
       <div style={{
         position: 'absolute', top: -120, left: -40, right: -40, height: 360,
         background: 'radial-gradient(60% 70% at 50% 30%, rgba(163,230,53,0.18), transparent 70%)',
@@ -72,9 +77,10 @@ export default function LoginPage() {
             </label>
             <input
               type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="tu@email.com" required
+              placeholder="tu@email.com" required autoComplete="email"
+              inputMode="email"
               style={{
-                width: '100%', padding: '13px 14px', fontSize: 14,
+                width: '100%', padding: '13px 14px', fontSize: 16,
                 fontFamily: 'Manrope, sans-serif', color: '#F5F5F4',
                 background: '#1A2420', border: '1px solid rgba(163,230,53,0.14)',
                 borderRadius: 16, outline: 'none', boxSizing: 'border-box',
@@ -87,9 +93,9 @@ export default function LoginPage() {
             </label>
             <input
               type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••" required
+              placeholder="••••••••" required autoComplete="current-password"
               style={{
-                width: '100%', padding: '13px 14px', fontSize: 14,
+                width: '100%', padding: '13px 14px', fontSize: 16,
                 fontFamily: 'Manrope, sans-serif', color: '#F5F5F4',
                 background: '#1A2420', border: '1px solid rgba(163,230,53,0.14)',
                 borderRadius: 16, outline: 'none', boxSizing: 'border-box',
@@ -105,7 +111,7 @@ export default function LoginPage() {
             width: '100%', height: 54, borderRadius: 16, fontSize: 15, marginTop: 6,
             opacity: loading ? 0.7 : 1,
           }}>
-            {loading ? 'Accesso...' : 'Accedi'}
+            {loading ? 'Accesso in corso...' : 'Accedi'}
           </button>
         </form>
 
@@ -117,5 +123,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0A0F0A' }} />}>
+      <LoginForm />
+    </Suspense>
   );
 }
