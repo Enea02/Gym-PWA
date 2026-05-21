@@ -154,6 +154,39 @@
   }
 }
 
+/* ── Light theme ─────────────────────────────────────── */
+[data-theme="light"] {
+  --app-bg: #F2F7F2;
+  color-scheme: light;
+}
+[data-theme="light"] body {
+  background-color: #F2F7F2 !important;
+  color: #0A1208 !important;
+}
+[data-theme="light"] .gt-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)), #E0EEDF !important;
+  border-color: rgba(60,130,15,0.2) !important;
+}
+[data-theme="light"] .gt-card-hi {
+  background: #D8ECD8 !important;
+  border-color: rgba(60,130,15,0.25) !important;
+}
+[data-theme="light"] .gt-skeleton {
+  background: linear-gradient(90deg, #D8ECD8 25%, #C8E0C8 50%, #D8ECD8 75%) !important;
+}
+[data-theme="light"] .gt-btn-secondary {
+  color: #0A1208 !important;
+  border-color: rgba(50,120,10,0.3) !important;
+}
+[data-theme="light"] .gt-chip {
+  background: rgba(60,130,15,0.12) !important;
+  border-color: rgba(60,130,15,0.3) !important;
+  color: #2A6800 !important;
+}
+[data-theme="light"] .mono {
+  color: inherit;
+}
+
 /* GymTrack utility classes */
 .gt-card {
   background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0)), #1A2420;

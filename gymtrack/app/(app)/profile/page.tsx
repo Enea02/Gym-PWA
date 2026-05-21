@@ -5,6 +5,7 @@ import { ChevronRight, LogOut, Settings, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { Toggle } from '@/components/ui/Toggle';
 import { logoutAction } from './actions';
+import { useSettings } from '@/components/providers/SettingsProvider';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface UserProfile {
@@ -313,6 +314,7 @@ function AddMeasurementForm({ onClose, onAdded }: AddMeasurementFormProps) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 export default function ProfilePage() {
+  const { unit, theme, setUnit, setTheme } = useSettings();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -692,11 +694,11 @@ export default function ProfilePage() {
                 <button
                   key={u}
                   className="mono"
-                  onClick={() => patchProfile({ preferredUnit: u })}
+                  onClick={() => { setUnit(u); patchProfile({ preferredUnit: u }); }}
                   style={{
                     padding: '4px 12px', borderRadius: 99, border: 'none', fontSize: 11, fontWeight: 800, cursor: 'pointer',
-                    background: (profile?.preferredUnit ?? 'kg') === u ? 'linear-gradient(135deg, #A3E635, #65A30D)' : 'rgba(255,255,255,0.05)',
-                    color: (profile?.preferredUnit ?? 'kg') === u ? '#0A0F0A' : '#A8B5A8',
+                    background: unit === u ? 'linear-gradient(135deg, #A3E635, #65A30D)' : 'rgba(255,255,255,0.05)',
+                    color: unit === u ? '#0A0F0A' : '#A8B5A8',
                     transition: 'all 0.2s',
                   }}
                 >{u}</button>
@@ -709,8 +711,8 @@ export default function ProfilePage() {
             <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🌙</div>
             <div style={{ flex: 1, fontSize: 14, color: '#F5F5F4', fontWeight: 600 }}>Tema scuro</div>
             <Toggle
-              on={(profile?.theme ?? 'dark') === 'dark'}
-              onChange={v => patchProfile({ theme: v ? 'dark' : 'light' })}
+              on={theme === 'dark'}
+              onChange={v => { const t = v ? 'dark' : 'light'; setTheme(t); patchProfile({ theme: t }); }}
             />
           </div>
 
