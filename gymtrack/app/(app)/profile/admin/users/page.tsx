@@ -27,7 +27,7 @@ export default function AdminUsersPage() {
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
-      <div className="gt-scroll" style={{ position: 'absolute', inset: 0, paddingTop: 60, paddingBottom: 130 }}>
+      <div className="gt-scroll" style={{ position: 'absolute', inset: 0, paddingTop: 44, paddingBottom: 130 }}>
         {/* Top */}
         <div style={{ padding: '14px 22px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
