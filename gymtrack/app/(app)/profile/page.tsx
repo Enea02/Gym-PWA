@@ -1,42 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, LogOut, Settings, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { Toggle } from '@/components/ui/Toggle';
 import { logoutAction } from './actions';
 import { useSettings } from '@/components/providers/SettingsProvider';
-
-// ── Types ──────────────────────────────────────────────────────────────────
-interface UserProfile {
-  id: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  age: number | null;
-  heightCm: number | null;
-  currentWeightKg: number | null;
-  targetWeightKg: number | null;
-  sex: string | null;
-  experienceLevel: string | null;
-  fitnessGoal: string | null;
-  preferredUnit: string;
-  theme: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Measurement {
-  id: string;
-  measuredAt: string;
-  weightKg: number | null;
-  bicepCm: number | null;
-  chestCm: number | null;
-  waistCm: number | null;
-  hipsCm: number | null;
-  thighCm: number | null;
-  bodyFatPercent: number | null;
-}
+import { useMe, useUpdateMe, useBodyWeight, useAddMeasurement, type UserProfile, type Measurement } from '@/hooks/useStats';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmtDate(iso: string) {
@@ -221,42 +191,34 @@ function SelectRow({
 // ── Add measurement form ───────────────────────────────────────────────────
 interface AddMeasurementFormProps {
   onClose: () => void;
-  onAdded: (m: Measurement) => void;
 }
 
-function AddMeasurementForm({ onClose, onAdded }: AddMeasurementFormProps) {
+function AddMeasurementForm({ onClose }: AddMeasurementFormProps) {
   const [weightKg, setWeightKg] = useState('');
   const [bicepCm, setBicepCm] = useState('');
   const [chestCm, setChestCm] = useState('');
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const addMeasurement = useAddMeasurement();
+  const saving = addMeasurement.isPending;
 
   const handleSubmit = async () => {
     if (!weightKg && !bicepCm && !chestCm) {
       setError('Inserisci almeno un valore');
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = { measuredAt: new Date().toISOString() };
-      if (weightKg) body.weightKg = parseFloat(weightKg);
-      if (bicepCm) body.bicepCm = parseFloat(bicepCm);
-      if (chestCm) body.chestCm = parseFloat(chestCm);
+      const payload: Partial<Measurement> & { measuredAt: string } = {
+        measuredAt: new Date().toISOString(),
+      };
+      if (weightKg) payload.weightKg = parseFloat(weightKg);
+      if (bicepCm) payload.bicepCm = parseFloat(bicepCm);
+      if (chestCm) payload.chestCm = parseFloat(chestCm);
 
-      const res = await fetch('/api/stats/body-weight', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('Errore nel salvataggio');
-      const added: Measurement = await res.json();
-      onAdded(added);
+      await addMeasurement.mutateAsync(payload);
       onClose();
     } catch {
       setError('Errore nel salvataggio');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -315,45 +277,29 @@ function AddMeasurementForm({ onClose, onAdded }: AddMeasurementFormProps) {
 // ── Main component ─────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const { unit, theme, setUnit, setTheme } = useSettings();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [measurements, setMeasurements] = useState<Measurement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: profile, isLoading: loadingProfile } = useMe();
+  const { data: bodyWeight = [], isLoading: loadingWeight } = useBodyWeight(365);
+  const updateMe = useUpdateMe();
+  const loading = loadingProfile || loadingWeight;
+  const saving = updateMe.isPending;
+
+  const measurements = useMemo(
+    () => [...bodyWeight].sort(
+      (a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime()
+    ),
+    [bodyWeight],
+  );
+
   const [editingField, setEditingField] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [showAddMeasurement, setShowAddMeasurement] = useState(false);
-  const [saving, setSaving] = useState(false);
 
-  // Load on mount
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/users/me').then(r => r.json()),
-      fetch('/api/stats/body-weight?days=365').then(r => r.json()),
-    ]).then(([user, meas]) => {
-      setProfile(user);
-      const sorted = [...(Array.isArray(meas) ? meas : [])].sort(
-        (a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime()
-      );
-      setMeasurements(sorted);
-    }).catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  // PATCH helper
+  // PATCH helper (optimistic via useUpdateMe)
   const patchProfile = async (data: Partial<UserProfile>) => {
-    setSaving(true);
     try {
-      const res = await fetch('/api/users/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) return;
-      const updated: UserProfile = await res.json();
-      setProfile(updated);
+      await updateMe.mutateAsync(data);
     } catch (e) {
       console.error(e);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -393,7 +339,7 @@ export default function ProfilePage() {
   const isAdmin = profile?.role === 'admin';
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
       <div className="gt-scroll" style={{ position: 'absolute', inset: 0, paddingTop: 44, paddingBottom: 130, overflowX: 'hidden' }}>
 
         {/* Hero */}
@@ -428,7 +374,7 @@ export default function ProfilePage() {
                 <div style={{
                   position: 'absolute', bottom: -4, right: -4,
                   width: 28, height: 28, borderRadius: 99,
-                  background: '#070B07', border: '2px solid #A3E635',
+                  background: 'var(--page-bg-deep)', border: '2px solid #A3E635',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   boxShadow: '0 0 12px rgba(163,230,53,0.4)',
                 }}>
@@ -740,10 +686,7 @@ export default function ProfilePage() {
 
       {/* Add measurement modal */}
       {showAddMeasurement && (
-        <AddMeasurementForm
-          onClose={() => setShowAddMeasurement(false)}
-          onAdded={(m) => setMeasurements(prev => [m, ...prev])}
-        />
+        <AddMeasurementForm onClose={() => setShowAddMeasurement(false)} />
       )}
     </div>
   );

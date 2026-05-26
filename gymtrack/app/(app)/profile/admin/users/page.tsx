@@ -156,7 +156,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
       <div className="gt-scroll" style={{ position: 'absolute', inset: 0, paddingTop: 44, paddingBottom: 130, overflowX: 'hidden' }}>
 
         {/* Header */}

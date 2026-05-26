@@ -39,7 +39,7 @@ export default function ManualRecordingPage() {
   }
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
       {/* Top bar */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10,

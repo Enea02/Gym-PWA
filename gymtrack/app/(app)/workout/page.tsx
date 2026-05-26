@@ -1,24 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, Play, PencilLine, Plus, MoreHorizontal, X } from 'lucide-react';
-
-interface PlannedExercise {
-  id: string;
-  orderIndex: number;
-  plannedSets: number;
-  plannedReps: number;
-  plannedWeightKg: number | null;
-  defaultRestSeconds: number | null;
-  template: { name: string; muscleGroup: string | null };
-}
-
-interface WorkoutPlan {
-  id: string;
-  name: string;
-  dayOfWeek: number;
-  exercises: PlannedExercise[];
-}
+import { useSettings } from '@/components/providers/SettingsProvider';
+import { usePlans, useCreateExercise, useCreatePlan, useUpdatePlan, type WorkoutPlan } from '@/hooks/useStats';
 
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 const DAY_LABELS_SHORT = ['D', 'L', 'M', 'M', 'G', 'V', 'S'];
@@ -38,8 +23,11 @@ function getWeekDates() {
 
 export default function WorkoutPage() {
   const router = useRouter();
-  const [plans, setPlans] = useState<WorkoutPlan[]>([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
+  const { formatWeight } = useSettings();
+  const { data: plans = [], isLoading: loadingPlans } = usePlans();
+  const createExercise = useCreateExercise();
+  const createPlan = useCreatePlan();
+  const updatePlan = useUpdatePlan();
 
   // Selected day index in the week row (0=Mon ... 6=Sun)
   const today = new Date();
@@ -51,20 +39,10 @@ export default function WorkoutPage() {
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [newEx, setNewEx] = useState({ name: '', muscleGroup: 'chest' as string, sets: 3, reps: 10, weight: 0, rest: 90 });
-  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const saving = createExercise.isPending || createPlan.isPending || updatePlan.isPending;
 
   const weekDates = getWeekDates();
-
-  useEffect(() => {
-    fetch('/api/workouts/plans')
-      .then(r => r.json())
-      .then(data => {
-        setPlans(Array.isArray(data) ? data : []);
-        setLoadingPlans(false);
-      })
-      .catch(() => setLoadingPlans(false));
-  }, []);
 
   // Map plan by dayOfWeek (0=Sun..6=Sat)
   // weekDates[0]=Mon, weekDates[6]=Sun
@@ -86,96 +64,60 @@ export default function WorkoutPage() {
       setSaveError('Inserisci il nome dell\'esercizio');
       return;
     }
-    setSaving(true);
     setSaveError('');
     try {
-      // 1. Create exercise template
-      const tplRes = await fetch('/api/exercises/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newEx.name.trim(), muscleGroup: newEx.muscleGroup }),
+      const template = await createExercise.mutateAsync({
+        name: newEx.name.trim(),
+        muscleGroup: newEx.muscleGroup,
       });
 
-      if (!tplRes.ok) {
-        const err = await tplRes.json().catch(() => ({}));
-        throw new Error(err?.error ?? 'Errore creazione esercizio');
-      }
-
-      const template = await tplRes.json();
-
-      // 2. Create plan for the selected day if it doesn't exist
       const selectedDate = weekDates[selectedIdx];
       const targetDow = selectedDate ? selectedDate.getDay() : todayDow;
-      let plan = plans.find(p => p.dayOfWeek === targetDow) ?? null;
+      const plan = plans.find(p => p.dayOfWeek === targetDow) ?? null;
+
+      const newExerciseEntry = {
+        exerciseTemplateId: template.id,
+        orderIndex: plan?.exercises.length ?? 0,
+        plannedSets: newEx.sets,
+        plannedReps: newEx.reps,
+        plannedWeightKg: newEx.weight > 0 ? newEx.weight : null,
+        defaultRestSeconds: newEx.rest,
+      };
 
       if (!plan) {
-        const planRes = await fetch('/api/workouts/plans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: `Piano ${DAY_LABELS[(targetDow + 6) % 7]}`,
-            dayOfWeek: targetDow,
-            exercises: [{
-              exerciseTemplateId: template.id,
-              orderIndex: 0,
-              plannedSets: newEx.sets,
-              plannedReps: newEx.reps,
-              plannedWeightKg: newEx.weight > 0 ? newEx.weight : null,
-              defaultRestSeconds: newEx.rest,
-            }],
-          }),
+        await createPlan.mutateAsync({
+          name: `Piano ${DAY_LABELS[(targetDow + 6) % 7]}`,
+          dayOfWeek: targetDow,
+          exercises: [newExerciseEntry],
         });
-        if (!planRes.ok) {
-          const err = await planRes.json().catch(() => ({}));
-          throw new Error(err?.error ?? 'Errore creazione piano');
-        }
-        const newPlan = await planRes.json();
-        setPlans(prev => [...prev, newPlan]);
       } else {
-        // Add exercise to existing plan
-        const planRes = await fetch(`/api/workouts/plans/${plan.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            exercises: [...plan.exercises.map((ex, i) => ({
-              exerciseTemplateId: ex.template ? (ex as any).exerciseTemplateId ?? ex.id : ex.id,
-              orderIndex: ex.orderIndex,
-              plannedSets: ex.plannedSets,
-              plannedReps: ex.plannedReps,
-              plannedWeightKg: ex.plannedWeightKg,
-              defaultRestSeconds: ex.defaultRestSeconds,
-            })), {
-              exerciseTemplateId: template.id,
-              orderIndex: plan.exercises.length,
-              plannedSets: newEx.sets,
-              plannedReps: newEx.reps,
-              plannedWeightKg: newEx.weight > 0 ? newEx.weight : null,
-              defaultRestSeconds: newEx.rest,
-            }],
-          }),
+        await updatePlan.mutateAsync({
+          id: plan.id,
+          payload: {
+            exercises: [
+              ...plan.exercises.map(ex => ({
+                exerciseTemplateId: ex.exerciseTemplateId ?? ex.id,
+                orderIndex: ex.orderIndex,
+                plannedSets: ex.plannedSets,
+                plannedReps: ex.plannedReps,
+                plannedWeightKg: ex.plannedWeightKg,
+                defaultRestSeconds: ex.defaultRestSeconds,
+              })),
+              newExerciseEntry,
+            ],
+          },
         });
-        // If PATCH not available, just refresh
-        if (planRes.ok) {
-          const updated = await planRes.json();
-          setPlans(prev => prev.map(p => p.id === plan!.id ? updated : p));
-        }
       }
-
-      // Refresh plans
-      const refreshed = await fetch('/api/workouts/plans').then(r => r.json());
-      if (Array.isArray(refreshed)) setPlans(refreshed);
 
       setShowAddExercise(false);
       setNewEx({ name: '', muscleGroup: 'chest', sets: 3, reps: 10, weight: 0, rest: 90 });
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Errore sconosciuto');
-    } finally {
-      setSaving(false);
     }
   }
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
       <div className="gt-scroll" style={{ position: 'absolute', inset: 0, paddingTop: 44, paddingBottom: 130 }}>
         {/* Top */}
         <div style={{ padding: '14px 22px 12px' }}>
@@ -287,7 +229,7 @@ export default function WorkoutPage() {
                         {ex.plannedWeightKg && (
                           <>
                             <span style={{ width: 3, height: 3, borderRadius: 99, background: '#4A584A' }} />
-                            <span className="mono" style={{ fontWeight: 700 }}>{ex.plannedWeightKg} kg</span>
+                            <span className="mono" style={{ fontWeight: 700 }}>{formatWeight(ex.plannedWeightKg!)}</span>
                           </>
                         )}
                         {ex.defaultRestSeconds && (

@@ -1,11 +1,19 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { ChevronLeft, MoreHorizontal, Check, Plus, ChevronRight, Square, Zap, Bell, Play, CheckCircle2 } from 'lucide-react';
 import { Stepper } from '@/components/ui/Stepper';
 import { ProgressDots } from '@/components/ui/ProgressDots';
 import { RatingCircle } from '@/components/ui/RatingCircle';
-import { Confetti } from '@/components/ui/Confetti';
+import { SessionClock } from '@/components/workout/SessionClock';
+import { useSettings } from '@/components/providers/SettingsProvider';
+
+// Confetti is only used on PR celebration — defer to a separate chunk.
+const Confetti = dynamic(
+  () => import('@/components/ui/Confetti').then(m => ({ default: m.Confetti })),
+  { ssr: false },
+);
 
 const DEMO_EXERCISES = [
   { id: 'bench', name: 'Panca piana bilanciere', muscle: 'Petto', sets: 4, reps: 8, weight: 92.5, rest: 120, pr: 90 },
@@ -15,10 +23,6 @@ const DEMO_EXERCISES = [
   { id: 'dips', name: 'Dips parallele', muscle: 'Petto', sets: 4, reps: 10, weight: 10, rest: 90 },
   { id: 'pushdown', name: 'Push-down ai cavi', muscle: 'Tricipiti', sets: 4, reps: 12, weight: 27.5, rest: 60 },
 ];
-
-function mmss(s: number) {
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-}
 
 type ExerciseStatus = 'pending' | 'active' | 'done';
 
@@ -37,6 +41,7 @@ interface ExerciseState {
 
 export default function LiveTrackingPage() {
   const router = useRouter();
+  const { formatWeight, weightLabel, unit } = useSettings();
 
   // View: 'list' = exercise selection overview, 'exercise' = active exercise
   const [view, setView] = useState<'list' | 'exercise'>('list');
@@ -53,12 +58,9 @@ export default function LiveTrackingPage() {
   const [reps, setReps] = useState(0);
   const [volume, setVolume] = useState(0);
 
-  // Session timer (always running)
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setElapsed(e => e + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // Session start timestamp — passed to <SessionClock> which owns its own
+  // 1s setInterval, so the per-second tick no longer re-renders this page.
+  const [sessionStart] = useState(() => Date.now());
 
   // Rest timer
   const [resting, setResting] = useState(false);
@@ -132,7 +134,7 @@ export default function LiveTrackingPage() {
           <div style={{ width: 8, height: 8, borderRadius: 99, background: '#00FF88', boxShadow: '0 0 8px #00FF88', animation: 'gt-pulse 1.6s ease-in-out infinite' }} />
           <span style={{ fontSize: 11, fontWeight: 800, color: '#A3E635' }}>LIVE</span>
           <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.12)' }} />
-          <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>{mmss(elapsed)}</span>
+          <SessionClock startedAt={sessionStart} />
           <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.12)' }} />
           <span className="mono" style={{ fontSize: 11, color: '#A3E635', fontWeight: 700 }}>{completedCount}/{exercises.length}</span>
         </div>
@@ -212,7 +214,7 @@ export default function LiveTrackingPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#6B7B6B' }}>
                         <span className="mono">{ex.sets}×{ex.reps}</span>
                         <span>·</span>
-                        <span className="mono">{ex.weight} kg</span>
+                        <span className="mono">{formatWeight(ex.weight)}</span>
                         <span>·</span>
                         <span className="mono">{ex.rest}s</span>
                       </div>
@@ -311,7 +313,7 @@ export default function LiveTrackingPage() {
               <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7B6B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
                 Peso (kg){activeEx.pr && <span className="mono" style={{ color: '#A3E635', marginLeft: 8 }}>PR @ {activeEx.pr}</span>}
               </div>
-              <Stepper value={weight} onChange={setWeight} step={2.5} suffix="kg" big />
+              <Stepper value={unit === 'lbs' ? +(weight * 2.20462).toFixed(1) : weight} onChange={v => setWeight(unit === 'lbs' ? +(v / 2.20462).toFixed(2) : v)} step={unit === 'lbs' ? 2.5 : 2.5} suffix={weightLabel} big />
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7B6B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>

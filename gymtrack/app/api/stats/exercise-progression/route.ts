@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth/permissions';
 import { db } from '@/lib/db';
 import { setLogs, workoutSessions, exerciseTemplates } from '@/lib/db/schema';
 import { eq, and, gte } from 'drizzle-orm';
+import { CACHE } from '@/lib/http/cache';
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
@@ -105,7 +106,7 @@ export async function GET(req: Request) {
       exercise: { id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup },
       period: periodDays,
       progression,
-    });
+    }, { headers: { 'Cache-Control': CACHE.medium } });
   } catch (error) {
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     console.error('[GET /api/stats/exercise-progression]', error);

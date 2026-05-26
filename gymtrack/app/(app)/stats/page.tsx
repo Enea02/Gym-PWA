@@ -1,59 +1,31 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Trophy, ArrowUp, ArrowDown, ChevronDown, Flame, X } from 'lucide-react';
-import { AreaChart } from '@/components/stats/AreaChart';
-import { CandleChart } from '@/components/stats/CandleChart';
-import { HeatmapCalendar } from '@/components/stats/HeatmapCalendar';
+import dynamic from 'next/dynamic';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Exercise {
-  id: string;
-  name: string;
-  muscleGroup: string;
-  isSystem: boolean;
-}
-
-interface DataPoint {
-  date: string;
-  maxWeightKg: number;
-  totalVolume: number;
-  setCount: number;
-  isPR: boolean;
-}
-
-interface HeatmapCell {
-  date: string;
-  count: number;
-  volume: number;
-  intensity: number;
-  isToday: boolean;
-}
-
-interface Measurement {
-  id: string;
-  measuredAt: string;
-  weightKg: number | null;
-}
-
-interface PR {
-  id: string;
-  exerciseName: string;
-  weightKg: number;
-  reps: number;
-  completedAt: string;
-}
-
-interface DashStats {
-  completionRate: number;
-  completedThisWeek: number;
-  plannedThisWeek: number;
-  streakDays: number;
-  weeklyVolume: number;
-  prCount: number;
-  volumeGrowth: number;
-  performanceScore: number;
-}
+// Lazy-loaded chart chunks — keep them out of the initial stats bundle.
+const AreaChart = dynamic(
+  () => import('@/components/stats/AreaChart').then(m => ({ default: m.AreaChart })),
+  { ssr: false, loading: () => <SkeletonBlock h={200} radius={10} /> },
+);
+const CandleChart = dynamic(
+  () => import('@/components/stats/CandleChart').then(m => ({ default: m.CandleChart })),
+  { ssr: false, loading: () => <SkeletonBlock h={200} radius={10} /> },
+);
+const HeatmapCalendar = dynamic(
+  () => import('@/components/stats/HeatmapCalendar').then(m => ({ default: m.HeatmapCalendar })),
+  { ssr: false, loading: () => <SkeletonBlock h={100} radius={8} /> },
+);
+import { useSettings } from '@/components/providers/SettingsProvider';
+import {
+  useExercises,
+  useHeatmap,
+  useBodyWeight,
+  useRecentPRs,
+  useDashboardStats,
+  useExerciseProgression,
+  type Exercise,
+} from '@/hooks/useStats';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -253,67 +225,32 @@ function ExercisePicker({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function StatsPage() {
+  const { formatWeight, unit } = useSettings();
   const [period, setPeriod] = useState('1M');
   const [metric, setMetric] = useState<'weight' | 'sets' | 'volume'>('weight');
 
   // Exercise selector
-  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedExId, setSelectedExId] = useState<string | null>(null);
   const [showExPicker, setShowExPicker] = useState(false);
 
-  // Data
-  const [progressionData, setProgressionData] = useState<DataPoint[]>([]);
-  const [heatmapGrid, setHeatmapGrid] = useState<HeatmapCell[]>([]);
-  const [heatmapWeeks, setHeatmapWeeks] = useState(16);
-  const [bodyWeightData, setBodyWeightData] = useState<Measurement[]>([]);
-  const [recentPRs, setRecentPRs] = useState<PR[]>([]);
-  const [dashStats, setDashStats] = useState<DashStats | null>(null);
+  // Data via React Query (cached, deduped, shared across pages)
+  const { data: exercises = [], isLoading: loadingExercises } = useExercises();
+  const { data: heatmapData, isLoading: loadingHeatmap } = useHeatmap(16);
+  const { data: bodyWeightData = [], isLoading: loadingWeight } = useBodyWeight(365);
+  const { data: recentPRs = [], isLoading: loadingPRs } = useRecentPRs();
+  const { data: dashStats, isLoading: loadingDash } = useDashboardStats();
+  const { data: progressionData = [], isFetching: loadingProgression } =
+    useExerciseProgression(selectedExId, PERIOD_DAYS[period] ?? 30);
 
-  // Loading states
-  const [loadingProgression, setLoadingProgression] = useState(false);
-  const [loadingInit, setLoadingInit] = useState(true);
+  const heatmapGrid = heatmapData?.grid ?? [];
+  const loadingInit = loadingExercises || loadingHeatmap || loadingWeight || loadingPRs || loadingDash;
 
-  // Load static data on mount
+  // Auto-select first exercise once loaded
   useEffect(() => {
-    const promises = [
-      fetch('/api/exercises/templates')
-        .then(r => r.json())
-        .then((list: Exercise[]) => {
-          setExercises(list);
-          if (list.length > 0) setSelectedExId(list[0].id);
-        }),
-      fetch('/api/stats/heatmap?weeks=16')
-        .then(r => r.json())
-        .then(d => {
-          setHeatmapGrid(d.grid ?? []);
-          setHeatmapWeeks(d.weeks ?? 16);
-        }),
-      fetch('/api/stats/body-weight?days=365')
-        .then(r => r.json())
-        .then(d => {
-          // API returns a plain array
-          const arr: Measurement[] = Array.isArray(d) ? d : (d.measurements ?? []);
-          setBodyWeightData(arr);
-        }),
-      fetch('/api/stats/recent-prs')
-        .then(r => r.json())
-        .then(d => setRecentPRs(d.prs ?? [])),
-      fetch('/api/stats/dashboard')
-        .then(r => r.json())
-        .then(d => setDashStats(d)),
-    ];
-    Promise.allSettled(promises).finally(() => setLoadingInit(false));
-  }, []);
-
-  // Reload progression when exercise or period changes
-  useEffect(() => {
-    if (!selectedExId) return;
-    setLoadingProgression(true);
-    fetch(`/api/stats/exercise-progression?exerciseId=${selectedExId}&period=${PERIOD_DAYS[period]}`)
-      .then(r => r.json())
-      .then(d => setProgressionData(d.progression ?? []))
-      .finally(() => setLoadingProgression(false));
-  }, [selectedExId, period]);
+    if (!selectedExId && exercises.length > 0) {
+      setSelectedExId(exercises[0]!.id);
+    }
+  }, [exercises, selectedExId]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
@@ -378,28 +315,28 @@ export default function StatsPage() {
     return rows;
   }, [heatmapGrid]);
 
-  // Body weight chart
-  const weightChartData = useMemo(() => {
-    const sorted = [...bodyWeightData]
+  // Body weight: single pass to derive sorted/current/delta/chart
+  const weightStats = useMemo(() => {
+    const sorted = bodyWeightData
       .filter(m => m.weightKg != null)
       .sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime());
-    return sorted.map((m, i) => ({
+    if (sorted.length === 0) {
+      return { chart: [] as { value: number; label: string }[], current: null as number | null, delta: null as number | null };
+    }
+    const chart = sorted.map((m, i) => ({
       value: m.weightKg as number,
       label: i % 4 === 0 ? shortLabel(m.measuredAt) : '',
     }));
+    const current = sorted[sorted.length - 1]!.weightKg as number;
+    const delta = sorted.length >= 2
+      ? (sorted[sorted.length - 1]!.weightKg as number) - (sorted[0]!.weightKg as number)
+      : null;
+    return { chart, current, delta };
   }, [bodyWeightData]);
 
-  const currentWeight = useMemo(() => {
-    const valid = bodyWeightData.filter(m => m.weightKg != null);
-    if (valid.length === 0) return null;
-    return valid[valid.length - 1]!.weightKg as number;
-  }, [bodyWeightData]);
-
-  const weightDelta = useMemo(() => {
-    const valid = bodyWeightData.filter(m => m.weightKg != null);
-    if (valid.length < 2) return null;
-    return (valid[valid.length - 1]!.weightKg as number) - (valid[0]!.weightKg as number);
-  }, [bodyWeightData]);
+  const weightChartData = weightStats.chart;
+  const currentWeight = weightStats.current;
+  const weightDelta = weightStats.delta;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -422,7 +359,7 @@ export default function StatsPage() {
         />
       )}
 
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
         {/* Background glow */}
         <div style={{
           position: 'absolute', top: -80, left: -40, right: -40, height: 300,
@@ -487,9 +424,9 @@ export default function StatsPage() {
                     {maxWeight != null ? (
                       <>
                         <span className="mono" style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', color: '#F5F5F4' }}>
-                          {maxWeight % 1 === 0 ? maxWeight : maxWeight.toFixed(1)}
+                          {unit === 'lbs' ? (maxWeight * 2.20462).toFixed(1) : (maxWeight % 1 === 0 ? maxWeight : maxWeight.toFixed(1))}
                         </span>
-                        <span style={{ fontSize: 14, color: '#6B7B6B', fontWeight: 600 }}>kg</span>
+                        <span style={{ fontSize: 14, color: '#6B7B6B', fontWeight: 600 }}>{unit === 'lbs' ? 'lbs' : 'kg'}</span>
                         {weightGrowth != null && (
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 2,
@@ -626,15 +563,15 @@ export default function StatsPage() {
                         <div style={{ fontSize: 11, color: '#6B7B6B', fontWeight: 700, textTransform: 'uppercase' }}>Peso corporeo</div>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
                           <span className="mono" style={{ fontSize: 24, fontWeight: 800, color: '#F5F5F4' }}>
-                            {currentWeight?.toFixed(1) ?? '—'}
+                            {currentWeight != null ? (unit === 'lbs' ? (currentWeight * 2.20462).toFixed(1) : currentWeight.toFixed(1)) : '—'}
                           </span>
-                          <span style={{ fontSize: 11, color: '#6B7B6B' }}>kg</span>
+                          <span style={{ fontSize: 11, color: '#6B7B6B' }}>{unit === 'lbs' ? 'lbs' : 'kg'}</span>
                           {weightDelta != null && (
                             <span className="mono" style={{
                               fontSize: 11, fontWeight: 700, marginLeft: 4,
                               color: weightDelta <= 0 ? '#A3E635' : '#EF4444',
                             }}>
-                              {weightDelta > 0 ? '+' : ''}{weightDelta.toFixed(1)} kg
+                              {weightDelta > 0 ? '+' : ''}{unit === 'lbs' ? (weightDelta * 2.20462).toFixed(1) : weightDelta.toFixed(1)} {unit === 'lbs' ? 'lbs' : 'kg'}
                             </span>
                           )}
                         </div>
@@ -821,8 +758,7 @@ export default function StatsPage() {
                     </div>
                   </div>
                   <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: '#A3E635', flexShrink: 0 }}>
-                    {pr.weightKg % 1 === 0 ? pr.weightKg : pr.weightKg.toFixed(1)}
-                    <span style={{ fontSize: 10, color: '#6B7B6B', marginLeft: 2 }}>kg</span>
+                    {formatWeight(pr.weightKg)}
                   </div>
                 </div>
               ))}

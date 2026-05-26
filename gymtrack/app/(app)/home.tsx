@@ -1,37 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
 import { RatingCircle } from '@/components/ui/RatingCircle';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { Flame, ArrowUp, Trophy, Zap, Play, PencilLine } from 'lucide-react';
 import Link from 'next/link';
-
-interface DashStats {
-  performanceScore: number;
-  completedThisWeek: number;
-  plannedThisWeek: number;
-  streakDays: number;
-  prCountMonth: number;
-  weeklyVolume: number;
-  volumeGrowthPct: number;
-  performanceTrend: number[];
-  currentWeightKg: number | null;
-}
-
-interface PlannedExercise {
-  id: string;
-  orderIndex: number;
-  plannedSets: number;
-  plannedReps: number;
-  plannedWeightKg: number | null;
-  template: { name: string };
-}
-
-interface WorkoutPlan {
-  id: string;
-  name: string;
-  dayOfWeek: number;
-  exercises: PlannedExercise[];
-}
+import { useSettings } from '@/components/providers/SettingsProvider';
+import { useDashboardStats, usePlans } from '@/hooks/useStats';
 
 function LoadingSkeleton() {
   const shimmer: React.CSSProperties = {
@@ -41,7 +14,7 @@ function LoadingSkeleton() {
     borderRadius: 12,
   };
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
       <div className="gt-scroll" style={{ position: 'absolute', inset: 0, paddingTop: 44, paddingBottom: 130 }}>
         <div style={{ padding: '14px 22px 8px' }}>
           <div style={{ ...shimmer, height: 14, width: 160, marginBottom: 8 }} />
@@ -83,37 +56,33 @@ function formatDate() {
 }
 
 export function HomeContent({ userName }: { userName: string }) {
-  const [stats, setStats] = useState<DashStats | null>(null);
-  const [plans, setPlans] = useState<WorkoutPlan[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/stats/dashboard').then(r => r.json()),
-      fetch('/api/workouts/plans').then(r => r.json()),
-    ]).then(([dash, planList]) => {
-      setStats(dash);
-      setPlans(Array.isArray(planList) ? planList : []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+  const { formatWeight, unit } = useSettings();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: plans = [], isLoading: plansLoading } = usePlans();
 
   // Find today's plan: getDay() returns 0=Sun,1=Mon,...,6=Sat
   // Schema dayOfWeek: 0=Sun,1=Mon,...,6=Sat (matching JS getDay())
   const todayDow = new Date().getDay();
   const todayPlan = plans.find(p => p.dayOfWeek === todayDow) ?? null;
 
-  if (loading) return <LoadingSkeleton />;
+  if (statsLoading || plansLoading) return <LoadingSkeleton />;
 
   const score = stats?.performanceScore ?? 0;
   const scoreLabel = score >= 85 ? 'Stai spaccando 🔥' : score >= 70 ? 'Continua così 🚀' : score >= 40 ? 'Stai costruendo 🔨' : 'Riparti con calma 💪';
 
   const completed = stats?.completedThisWeek ?? 0;
   const planned = stats?.plannedThisWeek ?? 5;
-  const volumeT = stats ? (stats.weeklyVolume / 1000).toFixed(1) : '0.0';
-  const volumeKg = stats?.weeklyVolume ?? 0;
+  // Volume: convert to lbs if needed (1 kg = 2.20462 lbs), show in tonnes/kilo-pounds
+  const rawVolume = stats?.weeklyVolume ?? 0;
+  const displayVolume = unit === 'lbs'
+    ? (rawVolume * 2.20462 / 1000).toFixed(1)
+    : (rawVolume / 1000).toFixed(1);
+  const volumeUnit = unit === 'lbs' ? 'klbs' : 't';
+  const volumeSubLabel = unit === 'lbs'
+    ? `${(rawVolume * 2.20462).toLocaleString('it-IT', { maximumFractionDigits: 0 })} lbs`
+    : `${rawVolume.toLocaleString('it-IT')} kg`;
   const volumeGrowth = stats?.volumeGrowthPct ?? 0;
-  const prCount = stats?.prCountMonth ?? 0;
+  const prCount = stats?.prCount ?? 0;
   const weightKg = stats?.currentWeightKg ?? null;
   const trend = stats?.performanceTrend ?? [0, 0, 0, 0, 0, 0, 0];
   const streak = stats?.streakDays ?? 0;
@@ -123,7 +92,7 @@ export function HomeContent({ userName }: { userName: string }) {
   const totalExercises = todayPlan?.exercises.length ?? 0;
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)', overflow: 'hidden' }}>
       <div style={{
         position: 'absolute', top: -120, left: -40, right: -40, height: 360,
         background: 'radial-gradient(60% 70% at 50% 30%, rgba(163,230,53,0.22), transparent 70%)',
@@ -174,8 +143,8 @@ export function HomeContent({ userName }: { userName: string }) {
               ))}
             </div>
           </StatCard>
-          <StatCard value={volumeT} unit="t" label="Volume">
-            <div style={{ marginTop: 6, fontSize: 11, color: '#6B7B6B', fontWeight: 600 }}>{volumeKg.toLocaleString('it-IT')} kg</div>
+          <StatCard value={displayVolume} unit={volumeUnit} label="Volume">
+            <div style={{ marginTop: 6, fontSize: 11, color: '#6B7B6B', fontWeight: 600 }}>{volumeSubLabel}</div>
           </StatCard>
           <StatCard value={`+${prCount}`} label="PR questo mese">
             <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, color: prCount > 0 ? '#A3E635' : '#6B7B6B' }}>
@@ -183,7 +152,7 @@ export function HomeContent({ userName }: { userName: string }) {
               <span style={{ fontSize: 11, fontWeight: 700 }}>{prCount > 0 ? `${prCount} record battut${prCount === 1 ? 'o' : 'i'}` : 'Nessun PR'}</span>
             </div>
           </StatCard>
-          <StatCard value={weightKg !== null ? weightKg : '—'} unit={weightKg !== null ? 'kg' : undefined} label="Peso corporeo">
+          <StatCard value={weightKg !== null ? (unit === 'lbs' ? (weightKg * 2.20462).toFixed(1) : weightKg) : '—'} unit={weightKg !== null ? unit : undefined} label="Peso corporeo">
             {weightKg !== null
               ? <div style={{ marginTop: 6, fontSize: 11, color: '#A8B5A8', fontWeight: 700 }}>aggiornato oggi</div>
               : <div style={{ marginTop: 6, fontSize: 11, color: '#6B7B6B', fontWeight: 700 }}>nessun dato</div>
@@ -220,7 +189,7 @@ export function HomeContent({ userName }: { userName: string }) {
                           <span style={{ fontSize: 13, fontWeight: 600 }}>{ex.template.name}</span>
                         </div>
                         <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: '#A8B5A8' }}>
-                          {ex.plannedSets}×{ex.plannedReps}{ex.plannedWeightKg ? ` · ${ex.plannedWeightKg}kg` : ''}
+                          {ex.plannedSets}×{ex.plannedReps}{ex.plannedWeightKg ? ` · ${formatWeight(ex.plannedWeightKg)}` : ''}
                         </span>
                       </div>
                     ))}

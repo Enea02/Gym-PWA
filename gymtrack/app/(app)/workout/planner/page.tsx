@@ -155,7 +155,7 @@ export default function PlannerPage() {
   // ─────────── STEP 1: choose number of days ───────────
   if (step === 'days') {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A' }}>
+      <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)' }}>
         {/* top glow */}
         <div style={{ position: 'absolute', top: -80, left: -40, right: -40, height: 300, background: 'radial-gradient(60% 60% at 50% 30%, rgba(163,230,53,0.2), transparent 70%)', pointerEvents: 'none' }} />
 
@@ -226,9 +226,9 @@ export default function PlannerPage() {
 
   // ─────────── STEP 2: add exercises per day ───────────
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0A0F0A' }}>
+    <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--page-bg)' }}>
       {/* Fixed header */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20, background: '#0A0F0A', padding: '44px 18px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20, background: 'var(--page-bg)', padding: '44px 18px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button onClick={() => setStep('days')} style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.06)', border: 'none', color: '#F5F5F4', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ChevronLeft size={18} />

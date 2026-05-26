@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { bodyMeasurements } from '@/lib/db/schema';
 import { eq, and, gte } from 'drizzle-orm';
 import { z } from 'zod';
+import { CACHE } from '@/lib/http/cache';
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
       )
       .orderBy(bodyMeasurements.measuredAt);
 
-    return NextResponse.json(measurements);
+    return NextResponse.json(measurements, { headers: { 'Cache-Control': CACHE.medium } });
   } catch (error) {
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     console.error('[GET /api/stats/body-weight]', error);

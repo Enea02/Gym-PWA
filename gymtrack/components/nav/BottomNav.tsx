@@ -74,7 +74,7 @@ export function BottomNav() {
       </Link>
 
       {/* glass pill */}
-      <div style={{
+      <div className="gt-nav-pill" style={{
         position: 'relative', height: 72, borderRadius: 28,
         background: 'rgba(20, 28, 22, 0.62)',
         backdropFilter: 'blur(22px) saturate(160%)',

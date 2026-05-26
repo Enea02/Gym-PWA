@@ -137,6 +137,38 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ── Design system CSS custom properties (reactive to theme) ── */
+:root {
+  --page-bg: #0A0F0A;
+  --page-bg-deep: #070B07;
+  --surface: #1A2420;
+  --surface-hi: #1F2A24;
+  --surface-raised: #111811;
+  --text-primary: #F5F5F4;
+  --text-sec: #A8B5A8;
+  --text-ter: #6B7B6B;
+  --text-dim: #4A584A;
+  --border-card: rgba(163,230,53,0.13);
+  --border-card-hi: rgba(163,230,53,0.18);
+  --glow-rgb: 163,230,53;
+}
+
+[data-theme="light"] {
+  --page-bg: #F5FAF5;
+  --page-bg-deep: #EDF5ED;
+  --surface: #E4EEE4;
+  --surface-hi: #DAE8DA;
+  --surface-raised: #EFF7EF;
+  --text-primary: #0A1208;
+  --text-sec: #2C422C;
+  --text-ter: #4A6A4A;
+  --text-dim: #6A8A6A;
+  --border-card: rgba(50,130,20,0.18);
+  --border-card-hi: rgba(50,130,20,0.24);
+  --glow-rgb: 50,130,20;
+  color-scheme: light;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -146,45 +178,53 @@
     @apply font-sans;
   }
   body {
-    background-color: #0A0F0A;
-    color: #F5F5F4;
+    background-color: var(--page-bg);
+    color: var(--text-primary);
     font-family: 'Manrope', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
+    transition: background-color 0.25s, color 0.25s;
   }
 }
 
-/* ── Light theme ─────────────────────────────────────── */
-[data-theme="light"] {
-  --app-bg: #F2F7F2;
-  color-scheme: light;
-}
-[data-theme="light"] body {
-  background-color: #F2F7F2 !important;
-  color: #0A1208 !important;
-}
+/* ── Light theme class-level overrides ── */
 [data-theme="light"] .gt-card {
-  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)), #E0EEDF !important;
-  border-color: rgba(60,130,15,0.2) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.2)), var(--surface) !important;
+  border-color: var(--border-card) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
 }
 [data-theme="light"] .gt-card-hi {
-  background: #D8ECD8 !important;
-  border-color: rgba(60,130,15,0.25) !important;
+  background: var(--surface-hi) !important;
+  border-color: var(--border-card-hi) !important;
+}
+[data-theme="light"] .gt-scroll {
+  background: transparent;
 }
 [data-theme="light"] .gt-skeleton {
-  background: linear-gradient(90deg, #D8ECD8 25%, #C8E0C8 50%, #D8ECD8 75%) !important;
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hi) 50%, var(--surface) 75%) !important;
 }
 [data-theme="light"] .gt-btn-secondary {
-  color: #0A1208 !important;
-  border-color: rgba(50,120,10,0.3) !important;
+  color: var(--text-primary) !important;
+  border-color: rgba(50,130,20,0.3) !important;
+  background: rgba(50,130,20,0.04) !important;
+}
+[data-theme="light"] .gt-btn-secondary:hover {
+  background: rgba(50,130,20,0.08) !important;
 }
 [data-theme="light"] .gt-chip {
-  background: rgba(60,130,15,0.12) !important;
-  border-color: rgba(60,130,15,0.3) !important;
-  color: #2A6800 !important;
+  background: rgba(50,130,20,0.1) !important;
+  border-color: rgba(50,130,20,0.25) !important;
+  color: #1A6A00 !important;
 }
-[data-theme="light"] .mono {
-  color: inherit;
+/* BottomNav in light mode */
+[data-theme="light"] .gt-nav-pill {
+  background: rgba(240,250,240,0.75) !important;
+  border-color: rgba(50,130,20,0.2) !important;
+  box-shadow: 0 8px 32px -8px rgba(0,0,0,0.15), 0 0 0 1px rgba(50,130,20,0.1) !important;
+}
+/* Text in light mode — use !important to fight inline color styles */
+[data-theme="light"] * {
+  --text-on-surface: var(--text-primary);
 }
 
 /* GymTrack utility classes */

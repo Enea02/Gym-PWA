@@ -12,8 +12,6 @@ const loginSchema = z.object({
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // DrizzleAdapter removed: using JWT strategy so adapter not required for sessions.
-  // Add back if you need database sessions or OAuth providers.
   session: { strategy: 'jwt' },
   pages: { signIn: '/login' },
   providers: [
@@ -25,23 +23,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         try {
           const parsed = loginSchema.safeParse(credentials);
-          if (!parsed.success) {
-            console.log('[auth] Validation failed:', parsed.error.issues);
-            return null;
-          }
+          if (!parsed.success) return null;
 
-          console.log('[auth] Looking up user:', parsed.data.email);
           const [user] = await db
             .select()
             .from(users)
             .where(eq(users.email, parsed.data.email))
             .limit(1);
 
-          console.log('[auth] User found:', !!user);
           if (!user) return null;
 
           const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-          console.log('[auth] Password valid:', valid);
           if (!valid) return null;
 
           await db
@@ -49,8 +41,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .set({ lastLoginAt: new Date() })
             .where(eq(users.id, user.id));
 
-          console.log('[auth] Login success for:', user.email, 'role:', user.role);
-          return { id: user.id, email: user.email, name: user.name, role: user.role };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            preferredUnit: (user.preferredUnit as 'kg' | 'lbs') ?? 'kg',
+            theme: (user.theme as 'dark' | 'light') ?? 'dark',
+          };
         } catch (err) {
           console.error('[auth] authorize error:', err);
           return null;
@@ -59,10 +57,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
-        token.role = (user as { id?: string; role?: string }).role;
-        token.id = user.id;
+        token.id = user.id as string;
+        token.role = (user as { role?: 'admin' | 'user' }).role ?? 'user';
+        token.preferredUnit = (user as { preferredUnit?: 'kg' | 'lbs' }).preferredUnit ?? 'kg';
+        token.theme = (user as { theme?: 'dark' | 'light' }).theme ?? 'dark';
+      }
+      // Allow client to push updated preferences via session.update()
+      if (trigger === 'update' && session) {
+        if (session.preferredUnit) token.preferredUnit = session.preferredUnit;
+        if (session.theme) token.theme = session.theme;
       }
       return token;
     },
@@ -70,6 +75,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token) {
         session.user.id = token.id as string;
         session.user.role = token.role as 'admin' | 'user';
+        session.user.preferredUnit = (token.preferredUnit as 'kg' | 'lbs') ?? 'kg';
+        session.user.theme = (token.theme as 'dark' | 'light') ?? 'dark';
       }
       return session;
     },

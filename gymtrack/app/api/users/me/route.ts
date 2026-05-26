@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { CACHE } from '@/lib/http/cache';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -23,8 +24,8 @@ export async function GET() {
     const session = await requireAuth();
     const [user] = await db.select().from(users).where(eq(users.id, session.user.id)).limit(1);
     if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const { passwordHash, ...safe } = user;
-    return NextResponse.json(safe);
+    const { passwordHash: _ph, ...safe } = user;
+    return NextResponse.json(safe, { headers: { 'Cache-Control': CACHE.medium } });
   } catch (error) {
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     console.error('[GET /api/users/me]', error);
@@ -43,7 +44,7 @@ export async function PATCH(req: Request) {
       .set({ ...parsed.data, updatedAt: new Date() })
       .where(eq(users.id, session.user.id))
       .returning();
-    const { passwordHash, ...safe } = updated;
+    const { passwordHash: _ph, ...safe } = updated;
     return NextResponse.json(safe);
   } catch (error) {
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;

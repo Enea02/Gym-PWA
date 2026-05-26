@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { workoutPlans, plannedExercises } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { createWorkoutPlanSchema } from '@/lib/validations';
+import { CACHE } from '@/lib/http/cache';
 
 export async function GET() {
   try {
@@ -23,7 +24,7 @@ export async function GET() {
       orderBy: (wp, { asc }) => [asc(wp.dayOfWeek)],
     });
 
-    return NextResponse.json(plans);
+    return NextResponse.json(plans, { headers: { 'Cache-Control': CACHE.long } });
   } catch (error) {
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     console.error('[GET /api/workouts/plans]', error);

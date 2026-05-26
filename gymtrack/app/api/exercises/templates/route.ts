@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth/permissions';
 import { db } from '@/lib/db';
 import { exerciseTemplates } from '@/lib/db/schema';
-import { eq, or, isNull } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { exerciseTemplateSchema } from '@/lib/validations';
+import { CACHE } from '@/lib/http/cache';
 
 export async function GET() {
   try {
@@ -22,7 +23,7 @@ export async function GET() {
       )
       .orderBy(exerciseTemplates.name);
 
-    return NextResponse.json(templates);
+    return NextResponse.json(templates, { headers: { 'Cache-Control': CACHE.static } });
   } catch (error) {
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     console.error('[GET /api/exercises/templates]', error);
